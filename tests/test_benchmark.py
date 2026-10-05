@@ -235,6 +235,23 @@ class TestLogParsing:
         assert steps[9].status == "error" and steps[9].seconds is None
         assert steps[10].status == "incomplete"
 
+    def test_failed_step_records_how_long_it_ran(self):
+        log = ("#10 [wheels 3/3] RUN pip wheel --no-binary cryptography cryptography==44.0.0\n"
+               "#10 0.512 Collecting cryptography==44.0.0\n"
+               "#10 50.05 cc: internal compiler error: Segmentation fault signal terminated program collect2\n"
+               "#10 ERROR: process did not complete successfully: exit code: 1\n")
+        steps = bm.parse_steps(log, ["linux/amd64"])
+        assert steps[0].status == "error" and steps[0].last_output_at == 50.05
+        s = bm.summarize(steps, "linux/amd64", "emulated")
+        assert s.failed_step.startswith("[wheels 3/3] RUN pip wheel") and s.failed_after_seconds == 50.05
+        assert s.step_seconds == {}
+
+    def test_step_seconds_keyed_by_step(self):
+        s = bm.summarize(bm.parse_steps(SINGLE_PLATFORM_LOG, ["linux/arm64"]), "linux/arm64", "native")
+        apt = [v for k, v in s.step_seconds.items() if k.startswith("[toolchain 2/3] RUN apt-get update")]
+        assert apt == [24.5] and len(s.step_seconds) == 5
+        assert s.failed_step is None
+
     def test_ansi_and_crlf_tolerated(self):
         noisy = "\r\n".join("\x1b[34m" + ln + "\x1b[0m" for ln in SINGLE_PLATFORM_LOG.splitlines())
         assert len(bm.parse_steps(noisy, ["linux/arm64"])) == 6
@@ -412,6 +429,25 @@ class TestRuns:
         assert ["--no-cache" in b for b in builds] == [True, False, False]
         assert [r.cold for r in report.runs] == [True, False, False]
 
+    # Real line from a QEMU-emulated linux/amd64 build of cryptography on an Apple M4 (Colima, buildx 0.37.2).
+    COLLECT2_SEGV = ("#10 50.05         = note: cc: internal compiler error: Segmentation fault signal "
+                     "terminated program collect2\n#10 ERROR: process \"/bin/sh -c pip wheel\" did not complete successfully: exit code: 1\n")
+
+    def test_plain_segfault_is_classified(self):
+        category, line = bm.classify_failure(self.COLLECT2_SEGV)
+        assert category == "segfault" and "collect2" in line
+
+    def test_segfault_under_emulation_becomes_qemu_segfault(self, tmp_path):
+        runner = FakeRunner(arch="aarch64", build=lambda cmd: cp(1, "", self.COLLECT2_SEGV))
+        report = bm.run_benchmark(run_args(tmp_path, "--platform", "linux/amd64"), runner)
+        assert report.execution == {"linux/amd64": "emulated"}
+        assert report.runs[0].failure_category == "qemu_segfault"
+
+    def test_segfault_on_native_build_stays_generic(self, tmp_path):
+        runner = FakeRunner(arch="aarch64", build=lambda cmd: cp(1, "", self.COLLECT2_SEGV))
+        report = bm.run_benchmark(run_args(tmp_path, "--platform", "linux/arm64"), runner)
+        assert report.runs[0].failure_category == "segfault"
+
     def test_warm_only(self, tmp_path):
         runner = FakeRunner()
         bm.run_benchmark(run_args(tmp_path, "--platform", "linux/arm64", "--runs", "1", "--warm-only"), runner)
@@ -485,5 +521,6 @@ class TestRuns:
         assert text.startswith("# syntax=docker/dockerfile:1.7")
         stages = [ln.split()[-1] for ln in text.splitlines() if ln.startswith("FROM ")]
         assert stages == ["toolchain", "wheels", "runtime"]
-        for pin in ("RUST_VERSION=", "CRYPTOGRAPHY_VERSION=", "PYDANTIC_CORE_VERSION=", "--no-binary cryptography,pydantic-core"):
+        for pin in ("RUST_VERSION=", "CRYPTOGRAPHY_VERSION=", "PYDANTIC_CORE_VERSION=",
+                    "--no-binary pydantic-core", "--no-binary cryptography"):
             assert pin in text

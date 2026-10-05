@@ -85,6 +85,11 @@ class StepTiming(BaseModel):
     instruction: str
     status: str  # done | cached | error | incomplete
     seconds: float | None = None
+    last_output_at: float | None = None  # last "#<id> <t>" timestamp seen; how long an unfinished step ran
+
+    @property
+    def label(self) -> str:
+        return f"[{self.stage} {self.position}] {self.instruction[:80]}"
 
 
 class PlatformSummary(BaseModel):
@@ -97,6 +102,9 @@ class PlatformSummary(BaseModel):
     slowest_step: str | None = None
     slowest_step_seconds: float | None = None
     stage_seconds: dict[str, float] = Field(default_factory=dict)
+    step_seconds: dict[str, float] = Field(default_factory=dict)
+    failed_step: str | None = None
+    failed_after_seconds: float | None = None
 
 
 class NodeStats(BaseModel):
@@ -232,6 +240,7 @@ HEADER_RE = re.compile(
 DONE_RE = re.compile(r"^#(?P<id>\d+) DONE (?P<secs>\d+(?:\.\d+)?)s$")
 CACHED_RE = re.compile(r"^#(?P<id>\d+) CACHED$")
 STEP_ERROR_RE = re.compile(r"^#(?P<id>\d+) ERROR: (?P<msg>.*)$")
+STEP_TS_RE = re.compile(r"^#(?P<id>\d+) (?P<ts>\d+\.\d+)(?: |$)")
 
 
 def parse_steps(log_text: str, platforms: list[str]) -> list[StepTiming]:
@@ -256,6 +265,9 @@ def parse_steps(log_text: str, platforms: list[str]) -> list[StepTiming]:
         elif m := STEP_ERROR_RE.match(line):
             if step := steps.get(int(m.group("id"))):
                 step.status = "error"
+        elif m := STEP_TS_RE.match(line):
+            if step := steps.get(int(m.group("id"))):
+                step.last_output_at = max(step.last_output_at or 0.0, float(m.group("ts")))
     return sorted(steps.values(), key=lambda s: s.id)
 
 
@@ -269,6 +281,7 @@ def summarize(steps: list[StepTiming], platform: str, execution: str) -> Platfor
         key = s.stage or "?"
         stage_seconds[key] = round(stage_seconds.get(key, 0.0) + (s.seconds or 0.0), 1)
     slowest = max(done, key=lambda s: s.seconds or 0.0, default=None)
+    failed = next((s for s in mine if s.status == "error"), None)
     return PlatformSummary(
         platform=platform,
         execution=execution,
@@ -276,14 +289,21 @@ def summarize(steps: list[StepTiming], platform: str, execution: str) -> Platfor
         steps_cached=len(cached),
         cache_hit_ratio=round(len(cached) / counted, 3) if counted else 0.0,
         step_seconds_total=round(sum(s.seconds or 0.0 for s in done), 1),
-        slowest_step=f"[{s.stage} {s.position}] {s.instruction[:80]}" if (s := slowest) else None,
+        slowest_step=slowest.label if slowest else None,
         slowest_step_seconds=slowest.seconds if slowest else None,
         stage_seconds=stage_seconds,
+        step_seconds={s.label: s.seconds or 0.0 for s in done},
+        failed_step=failed.label if failed else None,
+        failed_after_seconds=failed.last_output_at if failed else None,
     )
 
 
 FAILURE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("qemu_segfault", re.compile(r"qemu: uncaught target signal \d+|qemu-[\w-]+: .*(?:Segmentation fault|core dumped)", re.I)),
+    # A guest program crashing under emulation usually prints only this, with no "qemu:" prefix,
+    # e.g. "cc: internal compiler error: Segmentation fault signal terminated program collect2".
+    # run_benchmark() upgrades it to qemu_segfault when the platform was emulated.
+    ("segfault", re.compile(r"Segmentation fault|SIGSEGV", re.I)),
     ("binfmt_missing", re.compile(r"exec format error", re.I)),
     ("oom_killed", re.compile(r"signal: killed|exit code: 137|out of memory|Killed\s*$", re.I | re.M)),
     ("network", re.compile(r"Temporary failure resolving|Could not resolve host|TLS handshake timeout"
@@ -528,6 +548,8 @@ def run_benchmark(args: argparse.Namespace, runner: Runner = run_cmd) -> Benchma
                 category, message = "timeout", f"build exceeded --timeout {args.timeout}s"
             elif exit_code != 0:
                 category, message = classify_failure(output)
+                if category == "segfault" and "emulated" in modes.values():
+                    category = "qemu_segfault"
             runs.append(RunResult(
                 index=i, cold=cold, success=exit_code == 0, exit_code=exit_code, wall_seconds=wall,
                 failure_category=category, failure_message=message,
@@ -592,6 +614,8 @@ def print_summary(report: BenchmarkReport) -> None:
         for p in run.platforms:
             print(f"  {p.platform} ({p.execution}): {p.steps_executed} executed, {p.steps_cached} cached, "
                   f"slowest {p.slowest_step_seconds or 0:.1f}s {p.slowest_step or ''}")
+            if p.failed_step:
+                print(f"  {p.platform} failed after {p.failed_after_seconds or 0:.1f}s in {p.failed_step}")
         for n in run.nodes:
             if n.samples:
                 sat = f", saturation {n.saturation:.0%}" if n.saturation is not None else ""
