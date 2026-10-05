@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1.7
+# Benchmark workload for benchmark.py: a CPU-bound multi-stage build that
+# compiles two Rust-backed Python packages from source on the target
+# architecture. Under QEMU user-mode emulation every rustc/cc instruction is
+# translated, which is where the multi-arch penalty shows up.
+#
+# Versions are pinned so runs are comparable across machines and months.
+
+ARG PYTHON_VERSION=3.12
+ARG DEBIAN_RELEASE=bookworm
+
+# ---- toolchain: C compiler, OpenSSL headers, pinned Rust --------------------
+FROM python:${PYTHON_VERSION}-slim-${DEBIAN_RELEASE} AS toolchain
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential pkg-config libssl-dev libffi-dev curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+ARG RUST_VERSION=1.83.0
+ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --profile minimal --default-toolchain ${RUST_VERSION} \
+ && rustc --version
+
+# ---- wheels: force source builds of the Rust extensions ---------------------
+FROM toolchain AS wheels
+WORKDIR /wheels
+ARG CRYPTOGRAPHY_VERSION=44.0.0
+ARG PYDANTIC_CORE_VERSION=2.27.2
+RUN pip wheel --no-cache-dir --no-deps --no-binary cryptography,pydantic-core \
+      --wheel-dir /wheels \
+      cryptography==${CRYPTOGRAPHY_VERSION} pydantic-core==${PYDANTIC_CORE_VERSION}
+
+# ---- runtime: install the compiled wheels and smoke-test them ---------------
+FROM python:${PYTHON_VERSION}-slim-${DEBIAN_RELEASE} AS runtime
+COPY --from=wheels /wheels /wheels
+RUN pip install --no-cache-dir --find-links /wheels cryptography pydantic-core \
+ && rm -rf /wheels \
+ && python -c "import platform, cryptography, pydantic_core; print(platform.machine(), cryptography.__version__, pydantic_core.__version__)"
+CMD ["python", "-c", "import platform; print(platform.machine())"]

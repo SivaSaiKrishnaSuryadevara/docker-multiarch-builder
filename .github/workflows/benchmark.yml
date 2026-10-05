@@ -1,0 +1,83 @@
+# Runs Dockerfile.benchmark on GitHub-hosted runners in four configurations:
+# each architecture natively, and each architecture under QEMU on the other.
+# Manual trigger only: the emulated jobs take a long time.
+name: Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "Runs per job (first cold, rest warm)"
+        default: "2"
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { label: gha-native-amd64,        runner: ubuntu-24.04,     platform: linux/amd64, qemu: false }
+          - { label: gha-native-arm64,        runner: ubuntu-24.04-arm, platform: linux/arm64, qemu: false }
+          - { label: gha-qemu-arm64-on-amd64, runner: ubuntu-24.04,     platform: linux/arm64, qemu: true }
+          - { label: gha-qemu-amd64-on-arm64, runner: ubuntu-24.04-arm, platform: linux/amd64, qemu: true }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Register QEMU binfmt handlers
+        if: matrix.qemu
+        uses: docker/setup-qemu-action@v3
+
+      - name: Runner hardware
+        run: |
+          uname -m; nproc; free -h
+          docker buildx version
+
+      - name: Benchmark
+        run: >
+          python benchmark.py run
+          --platform ${{ matrix.platform }}
+          --runs ${{ inputs.runs }}
+          --label ${{ matrix.label }}
+          --timeout 8400
+          --json results/${{ matrix.label }}.json
+          --save-logs logs
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ matrix.label }}
+          path: |
+            results/
+            logs/
+
+  summary:
+    needs: bench
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Comparison table
+        run: |
+          shopt -s nullglob
+          files=(artifacts/*/results/*.json)
+          if [ ${#files[@]} -eq 0 ]; then echo "No reports produced" >> "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          python benchmark.py compare "${files[@]}" >> "$GITHUB_STEP_SUMMARY"
