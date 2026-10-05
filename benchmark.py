@@ -89,7 +89,8 @@ class StepTiming(BaseModel):
 
     @property
     def label(self) -> str:
-        return f"[{self.stage} {self.position}] {self.instruction[:80]}"
+        prefix = f"{self.stage} " if self.stage else ""
+        return f"[{prefix}{self.position}] {self.instruction[:80]}"
 
 
 class PlatformSummary(BaseModel):
@@ -426,6 +427,7 @@ class BuilderSession:
                 if proc.returncode != 0:
                     raise BenchmarkError(f"{' '.join(cmd[:4])} failed: {proc.stderr.strip()[:300]}")
         except BaseException:
+            self.keep = False  # --keep-builder never preserves a half-created builder
             self.__exit__(*sys.exc_info())
             raise
         return self

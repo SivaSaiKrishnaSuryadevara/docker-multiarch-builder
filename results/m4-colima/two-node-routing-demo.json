@@ -1,0 +1,100 @@
+{
+  "label": "colima-two-node",
+  "builder": "mab-hybrid-demo",
+  "dockerfile": "/private/tmp/claude-501/-Users-sivasaikrishnasuryadevara-Documents-ml-model-pipeline/3c6469b9-e239-4410-8d85-3969d86f2b7f/scratchpad/hybrid/Dockerfile.arch",
+  "platforms": [
+    "linux/amd64",
+    "linux/arm64"
+  ],
+  "execution": {
+    "linux/amd64": "emulated",
+    "linux/arm64": "native"
+  },
+  "nodes": [
+    {
+      "name": "mab-hybrid-demo-0",
+      "endpoint": null,
+      "pinned_platform": "linux/arm64",
+      "arch": "arm64",
+      "ncpu": 4,
+      "mem_total_bytes": 4094005248
+    },
+    {
+      "name": "mab-hybrid-demo-1",
+      "endpoint": "unix:///Users/sivasaikrishnasuryadevara/.colima/default/docker.sock",
+      "pinned_platform": "linux/amd64",
+      "arch": "arm64",
+      "ncpu": 4,
+      "mem_total_bytes": 4094005248
+    }
+  ],
+  "runs": [
+    {
+      "index": 0,
+      "cold": true,
+      "success": true,
+      "exit_code": 0,
+      "wall_seconds": 2.2,
+      "failure_category": null,
+      "failure_message": null,
+      "platforms": [
+        {
+          "platform": "linux/amd64",
+          "execution": "emulated",
+          "steps_executed": 2,
+          "steps_cached": 0,
+          "cache_hit_ratio": 0.0,
+          "step_seconds_total": 1.3,
+          "slowest_step": "[None 1/2] FROM docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c",
+          "slowest_step_seconds": 1.2,
+          "stage_seconds": {
+            "?": 1.3
+          },
+          "step_seconds": {
+            "[None 1/2] FROM docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c": 1.2,
+            "[None 2/2] RUN echo \"built-on=$(uname -m)\"": 0.1
+          },
+          "failed_step": null,
+          "failed_after_seconds": null
+        },
+        {
+          "platform": "linux/arm64",
+          "execution": "native",
+          "steps_executed": 2,
+          "steps_cached": 0,
+          "cache_hit_ratio": 0.0,
+          "step_seconds_total": 1.1,
+          "slowest_step": "[None 1/2] FROM docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c",
+          "slowest_step_seconds": 1.1,
+          "stage_seconds": {
+            "?": 1.1
+          },
+          "step_seconds": {
+            "[None 1/2] FROM docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c": 1.1,
+            "[None 2/2] RUN echo \"built-on=$(uname -m)\"": 0.0
+          },
+          "failed_step": null,
+          "failed_after_seconds": null
+        }
+      ],
+      "nodes": [
+        {
+          "node": "mab-hybrid-demo-0",
+          "samples": 1,
+          "cpu_peak_pct": 6.6,
+          "cpu_mean_pct": 6.6,
+          "mem_peak_bytes": 17563648,
+          "ncpu": 4
+        },
+        {
+          "node": "mab-hybrid-demo-1",
+          "samples": 1,
+          "cpu_peak_pct": 10.29,
+          "cpu_mean_pct": 10.3,
+          "mem_peak_bytes": 18045992,
+          "ncpu": 4
+        }
+      ]
+    }
+  ]
+}

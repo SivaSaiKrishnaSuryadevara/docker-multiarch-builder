@@ -393,6 +393,25 @@ class TestTeardown:
             bm.run_benchmark(args, flaky)
         assert runner.commands(["docker", "buildx", "rm"])
 
+    def test_keep_builder_still_removes_half_created_builder(self, tmp_path):
+        # Real buildx error when two nodes point at the same daemon endpoint.
+        runner = FakeRunner()
+        original = runner.__call__
+
+        def dup(cmd, timeout=None):
+            if cmd[:3] == ["docker", "buildx", "create"] and "--append" in cmd:
+                runner.calls.append(cmd)
+                return cp(1, "", "ERROR: invalid duplicate endpoint colima")
+            return original(cmd, timeout)
+        args = run_args(tmp_path, "--node", "linux/arm64", "--node", "linux/amd64", "--keep-builder")
+        with pytest.raises(bm.BenchmarkError, match="duplicate endpoint"):
+            bm.run_benchmark(args, dup)
+        assert runner.commands(["docker", "buildx", "rm"])
+
+    def test_step_label_without_stage_name(self):
+        steps = bm.parse_steps("#8 [linux/arm64 2/2] RUN echo hi\n#8 DONE 0.1s\n", ["linux/arm64", "linux/amd64"])
+        assert steps[0].stage is None and steps[0].label == "[2/2] RUN echo hi"
+
     def test_keep_builder_skips_removal(self, tmp_path):
         runner = FakeRunner()
         bm.run_benchmark(run_args(tmp_path, "--platform", "linux/arm64", "--keep-builder"), runner)

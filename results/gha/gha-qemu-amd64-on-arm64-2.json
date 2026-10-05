@@ -1,0 +1,63 @@
+{
+  "label": "gha-qemu-amd64-on-arm64",
+  "builder": "mab-d2127b39",
+  "dockerfile": "Dockerfile.benchmark",
+  "platforms": [
+    "linux/amd64"
+  ],
+  "execution": {
+    "linux/amd64": "emulated"
+  },
+  "nodes": [
+    {
+      "name": "mab-d2127b39-0",
+      "endpoint": null,
+      "pinned_platform": null,
+      "arch": "arm64",
+      "ncpu": 4,
+      "mem_total_bytes": 16722006016
+    }
+  ],
+  "runs": [
+    {
+      "index": 0,
+      "cold": true,
+      "success": false,
+      "exit_code": 1,
+      "wall_seconds": 139.7,
+      "failure_category": "qemu_segfault",
+      "failure_message": "#10 56.90 qemu: uncaught target signal 11 (Segmentation fault) - core dumped",
+      "platforms": [
+        {
+          "platform": "linux/amd64",
+          "execution": "emulated",
+          "steps_executed": 2,
+          "steps_cached": 0,
+          "cache_hit_ratio": 0.0,
+          "step_seconds_total": 77.4,
+          "slowest_step": "[toolchain 2/3] RUN apt-get update  && apt-get install -y --no-install-recommends build-essentia",
+          "slowest_step_seconds": 76.2,
+          "stage_seconds": {
+            "toolchain": 77.4
+          },
+          "step_seconds": {
+            "[toolchain 1/3] FROM docker.io/library/python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec7": 1.2,
+            "[toolchain 2/3] RUN apt-get update  && apt-get install -y --no-install-recommends build-essentia": 76.2
+          },
+          "failed_step": "[toolchain 3/3] RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs     | sh -s -- -y ",
+          "failed_after_seconds": 57.15
+        }
+      ],
+      "nodes": [
+        {
+          "node": "mab-d2127b39-0",
+          "samples": 40,
+          "cpu_peak_pct": 267.44,
+          "cpu_mean_pct": 108.8,
+          "mem_peak_bytes": 516423680,
+          "ncpu": 4
+        }
+      ]
+    }
+  ]
+}

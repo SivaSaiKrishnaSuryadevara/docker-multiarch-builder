@@ -1,0 +1,110 @@
+{
+  "label": "gha-native-arm64",
+  "builder": "mab-d5074aeb",
+  "dockerfile": "Dockerfile.benchmark",
+  "platforms": [
+    "linux/arm64"
+  ],
+  "execution": {
+    "linux/arm64": "native"
+  },
+  "nodes": [
+    {
+      "name": "mab-d5074aeb-0",
+      "endpoint": null,
+      "pinned_platform": null,
+      "arch": "arm64",
+      "ncpu": 4,
+      "mem_total_bytes": 16722046976
+    }
+  ],
+  "runs": [
+    {
+      "index": 0,
+      "cold": true,
+      "success": true,
+      "exit_code": 0,
+      "wall_seconds": 153.8,
+      "failure_category": null,
+      "failure_message": null,
+      "platforms": [
+        {
+          "platform": "linux/arm64",
+          "execution": "native",
+          "steps_executed": 8,
+          "steps_cached": 0,
+          "cache_hit_ratio": 0.0,
+          "step_seconds_total": 151.9,
+          "slowest_step": "[wheels 2/3] RUN pip wheel --no-cache-dir --no-deps --no-binary pydantic-core --wheel-dir /wh",
+          "slowest_step_seconds": 98.5,
+          "stage_seconds": {
+            "toolchain": 17.9,
+            "wheels": 131.2,
+            "runtime": 2.8
+          },
+          "step_seconds": {
+            "[toolchain 1/3] FROM docker.io/library/python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec7": 1.2,
+            "[toolchain 2/3] RUN apt-get update  && apt-get install -y --no-install-recommends build-essentia": 8.6,
+            "[toolchain 3/3] RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs     | sh -s -- -y ": 8.1,
+            "[wheels 1/3] WORKDIR /wheels": 0.0,
+            "[wheels 2/3] RUN pip wheel --no-cache-dir --no-deps --no-binary pydantic-core --wheel-dir /wh": 98.5,
+            "[wheels 3/3] RUN pip wheel --no-cache-dir --no-deps --no-binary cryptography --wheel-dir /whe": 32.7,
+            "[runtime 2/3] COPY --from=wheels /wheels /wheels": 0.0,
+            "[runtime 3/3] RUN pip install --no-cache-dir --find-links /wheels cryptography pydantic-core  ": 2.8
+          },
+          "failed_step": null,
+          "failed_after_seconds": null
+        }
+      ],
+      "nodes": [
+        {
+          "node": "mab-d5074aeb-0",
+          "samples": 44,
+          "cpu_peak_pct": 399.37,
+          "cpu_mean_pct": 172.2,
+          "mem_peak_bytes": 1741609238,
+          "ncpu": 4
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "cold": false,
+      "success": true,
+      "exit_code": 0,
+      "wall_seconds": 0.5,
+      "failure_category": null,
+      "failure_message": null,
+      "platforms": [
+        {
+          "platform": "linux/arm64",
+          "execution": "native",
+          "steps_executed": 1,
+          "steps_cached": 7,
+          "cache_hit_ratio": 0.875,
+          "step_seconds_total": 0.0,
+          "slowest_step": "[runtime 1/3] FROM docker.io/library/python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec7",
+          "slowest_step_seconds": 0.0,
+          "stage_seconds": {
+            "runtime": 0.0
+          },
+          "step_seconds": {
+            "[runtime 1/3] FROM docker.io/library/python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec7": 0.0
+          },
+          "failed_step": null,
+          "failed_after_seconds": null
+        }
+      ],
+      "nodes": [
+        {
+          "node": "mab-d5074aeb-0",
+          "samples": 1,
+          "cpu_peak_pct": 13.03,
+          "cpu_mean_pct": 13.0,
+          "mem_peak_bytes": 133064294,
+          "ncpu": 4
+        }
+      ]
+    }
+  ]
+}
