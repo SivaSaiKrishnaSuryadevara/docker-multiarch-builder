@@ -587,6 +587,8 @@ def compare_markdown(reports: list[BenchmarkReport], baseline: str | None = None
         warm = next((x for x in r.runs if not x.cold), None)
         execs = ", ".join(f"{p.split('/')[1]} ({m})" for p, m in r.execution.items())
         cold_s = f"{cold.wall_seconds:.0f}s" if cold else "-"
+        if cold and not cold.success:
+            cold_s += " (crashed)" if cold.failure_category != "timeout" else " (timed out)"
         speed = "-"
         if cold and cold.success and base_cold:
             speed = "baseline" if r is base else f"{base_cold / cold.wall_seconds:.2f}x"

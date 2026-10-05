@@ -516,6 +516,14 @@ class TestRuns:
         assert "| qemu-amd64 | amd64 (emulated) | 1400s | baseline | 3s | 6/6 | 350% (88%) | 2.00 GiB | ok |" in rows
         assert "| native-amd64 | amd64 (native) | 200s | 7.00x |" in rows[3]
 
+    def test_compare_marks_failed_cold_runs(self):
+        failed = bm.BenchmarkReport(label="qemu", builder="b", dockerfile="D", platforms=["linux/amd64"],
+                                    execution={"linux/amd64": "emulated"}, nodes=[], runs=[
+            bm.RunResult(index=0, cold=True, success=False, exit_code=1, wall_seconds=139.7,
+                         failure_category="qemu_segfault", platforms=[], nodes=[])])
+        row = bm.compare_markdown([failed]).splitlines()[2]
+        assert "| 140s (crashed) |" in row and "FAIL: qemu_segfault" in row
+
     def test_dockerfile_benchmark_is_multi_stage_and_pinned(self):
         text = (ROOT / "Dockerfile.benchmark").read_text()
         assert text.startswith("# syntax=docker/dockerfile:1.7")
