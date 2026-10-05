@@ -367,6 +367,19 @@ class TestTeardown:
                         "--platform", "linux/arm64"], runner) == 130
         assert runner.commands(["docker", "buildx", "rm"])
 
+    def test_interrupted_build_still_writes_partial_report(self, tmp_path):
+        def ctrl_c(cmd):
+            raise KeyboardInterrupt
+        runner = FakeRunner(build=ctrl_c)
+        out = tmp_path / "r.json"
+        code = bm.main(["run", "-f", str(self._df(tmp_path)), str(tmp_path), "--builder", "mab-test",
+                        "--platform", "linux/amd64", "--runs", "2", "--json", str(out)], runner)
+        assert code == 130
+        report = bm.BenchmarkReport.model_validate_json(out.read_text())
+        assert len(report.runs) == 1 and report.runs[0].failure_category == "interrupted"
+        assert report.runs[0].exit_code == 130 and not report.success
+        assert runner.commands(["docker", "buildx", "rm"])
+
     def test_sigterm_becomes_exception_and_handler_is_restored(self, tmp_path):
         before = signal.getsignal(signal.SIGTERM)
 

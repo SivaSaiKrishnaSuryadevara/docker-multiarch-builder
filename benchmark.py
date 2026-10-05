@@ -59,6 +59,14 @@ class Terminated(BaseException):
     """Raised from the SIGTERM handler so `finally` blocks still run."""
 
 
+class Interrupted(BaseException):
+    """A build was interrupted (Ctrl-C / SIGTERM); carries the partial report so it can still be saved."""
+
+    def __init__(self, report: "BenchmarkReport"):
+        super().__init__("interrupted")
+        self.report = report
+
+
 # =============================================================================
 # Models
 # =============================================================================
@@ -525,6 +533,7 @@ def run_benchmark(args: argparse.Namespace, runner: Runner = run_cmd) -> Benchma
         log.info("builder %s ready; execution: %s", builder, ", ".join(f"{p}={m}" for p, m in modes.items()))
 
         runs: list[RunResult] = []
+        interrupted = False
         for i in range(args.runs):
             cold = i == 0 and not args.warm_only
             cmd = build_command(builder, dockerfile, context, platforms, no_cache=cold,
@@ -536,6 +545,9 @@ def run_benchmark(args: argparse.Namespace, runner: Runner = run_cmd) -> Benchma
             try:
                 proc = runner(cmd, timeout=args.timeout)
                 exit_code, output = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+            except (KeyboardInterrupt, Terminated):
+                # Record the run instead of losing it; the builder is still torn down by BuilderSession.
+                exit_code, output, interrupted = 130, "", True
             except subprocess.TimeoutExpired as exc:
                 exit_code = 124
                 output = (exc.stdout or b"").decode(errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
@@ -546,7 +558,9 @@ def run_benchmark(args: argparse.Namespace, runner: Runner = run_cmd) -> Benchma
 
             steps = parse_steps(output, platforms)
             category = message = None
-            if exit_code == 124:
+            if interrupted:
+                category, message = "interrupted", f"build interrupted after {wall}s (Ctrl-C or SIGTERM)"
+            elif exit_code == 124:
                 category, message = "timeout", f"build exceeded --timeout {args.timeout}s"
             elif exit_code != 0:
                 category, message = classify_failure(output)
@@ -564,10 +578,13 @@ def run_benchmark(args: argparse.Namespace, runner: Runner = run_cmd) -> Benchma
             if exit_code != 0:
                 break  # a failed cold build makes warm-cache numbers meaningless
 
-    return BenchmarkReport(
+    report = BenchmarkReport(
         label=args.label or builder, builder=builder, dockerfile=str(dockerfile), platforms=platforms,
         execution=modes, nodes=infos, runs=runs,
     )
+    if interrupted:
+        raise Interrupted(report)
+    return report
 
 
 # =============================================================================
@@ -677,6 +694,14 @@ def main(argv: list[str] | None = None, runner: Runner = run_cmd) -> int:
     except BenchmarkError as exc:
         log.error("%s", exc)
         return 2
+    except Interrupted as exc:
+        if args.json_out:
+            Path(args.json_out).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.json_out).write_text(exc.report.model_dump_json(indent=2))
+            log.error("interrupted; builder removed; partial report written to %s", args.json_out)
+        else:
+            log.error("interrupted; builder removed")
+        return 130
     except (KeyboardInterrupt, Terminated):
         log.error("interrupted; builder removed")
         return 130
