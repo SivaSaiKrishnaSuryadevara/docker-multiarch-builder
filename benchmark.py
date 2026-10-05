@@ -346,7 +346,7 @@ class StatsSampler(threading.Thread):
         self.nodes, self.runner, self.interval = nodes, runner, interval
         self.stats = {n.name: NodeStats(node=n.name, ncpu=ncpu.get(n.name)) for n in nodes}
         self._cpu_sum = {n.name: 0.0 for n in nodes}
-        self._stop = threading.Event()
+        self._halt = threading.Event()
 
     def sample_once(self) -> None:
         for node in self.nodes:
@@ -369,12 +369,12 @@ class StatsSampler(threading.Thread):
                 st.mem_peak_bytes = max(st.mem_peak_bytes, mem)
 
     def run(self) -> None:
-        while not self._stop.is_set():
+        while not self._halt.is_set():
             self.sample_once()
-            self._stop.wait(self.interval)
+            self._halt.wait(self.interval)
 
     def stop(self) -> list[NodeStats]:
-        self._stop.set()
+        self._halt.set()
         if self.is_alive():
             self.join(timeout=20)
         return list(self.stats.values())
